@@ -74,6 +74,7 @@ DIRECT_BACKEND = True
 class BaseHost(object):
     TYPE_UNKNOWN = 'unknown'
     TYPE_OSP = 'osp'
+    TYPE_POD = 'pod'
     TYPE_VDSM = 'vdsm'
     TYPE = TYPE_UNKNOWN
 
@@ -88,6 +89,8 @@ class BaseHost(object):
             return BaseHost.TYPE_VDSM
         elif 'osp_environment' in data:
             return BaseHost.TYPE_OSP
+        elif not data['daemonize']:
+            return BaseHost.TYPE_POD
         else:
             return BaseHost.TYPE_UNKNOWN
 
@@ -97,6 +100,8 @@ class BaseHost(object):
             return OSPHost()
         if host_type == BaseHost.TYPE_VDSM:
             return VDSMHost()
+        if host_type == BaseHost.TYPE_POD:
+            return CNVHost()
         else:
             raise ValueError("Cannot build host of type: %r" % host_type)
 
@@ -134,6 +139,54 @@ class BaseHost(object):
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """
         hard_error("Cannot validate data for uknown host type")
+#
+#  }}}
+#
+############################################################################
+#
+#  Kubevirt {{{
+#
+
+
+class CNVHost(BaseHost):
+    TYPE = BaseHost.TYPE_VDSM
+
+    def create_runner(self, *args, **kwargs):
+        return SubprocessRunner(self, *args, **kwargs)
+
+    def getLogs(self):
+        # TODO: we should either pipe everything to stdout or push to log
+        # collector
+        return ('/tmp', '/tmp')
+
+    def handle_cleanup(self, data, state):
+        """ Handle cleanup after failed conversion """
+        # TODO: do we need to clean the PVCs?
+        pass
+
+    def handle_finish(self, data, state):
+        """ Handle finish after successfull conversion """
+        # TODO: update VM definition
+        return True
+
+    def check_install_drivers(self, data):
+        # Nothing to do for Kubevirt
+        pass
+
+    def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
+        """ Prepare virt-v2v command parts that are method dependent """
+        v2v_args.extend([
+            '-o', 'json',
+            '-os', '/data/vm',
+            '-oo', 'json-disks-pattern=disk%{DiskNo}/disk.img',
+            ])
+        return v2v_args, v2v_env
+
+    def validate_data(self, data):
+        """ Validate input data, fill in defaults, etc """
+        # No libvirt inside the POD, enforce direct backend
+        data['backend'] = 'direct'
+        return data
 #
 #  }}}
 #
