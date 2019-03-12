@@ -985,11 +985,11 @@ class OutputParser(object):  # {{{
         self._current_path = None
 
     def parse(self, state):
-        line = None
+        line = self._log.readline()
         while line != b'':
-            line = self._log.readline()
             logging.debug('%r', line)
             state = self.parse_line(state, line)
+            line = self._log.readline()
         return state
 
     def parse_line(self, state, line):
